@@ -1,22 +1,14 @@
-# --- CORE WEB & SERVER ---
 flask
 flask-socketio
 flask-cors
 gunicorn
 eventlet
-werkzeug
-python-dotenv
-
-# --- AI & DATA SCIENCE (KERAS 3 ALIGNMENT) ---
 tensorflow-cpu>=2.16.1
 keras>=3.0.0
 numpy<2.0.0
-pandas
 joblib
-
-# --- PHYSICS & GEOMETRY ---
+pandas
 trimesh
 rtree
-
-# --- REPORTING ---
 fpdf
+pyserial
