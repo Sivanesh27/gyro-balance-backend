@@ -1,14 +1,18 @@
+# Web Server
 flask
 flask-socketio
 flask-cors
 gunicorn
 eventlet
-tensorflow-cpu>=2.16.1
-keras>=3.0.0
-numpy<2.0.0
-joblib
-pandas
-trimesh
+
+# AI Stack - Matched to your Colab Audit
+tensorflow-cpu==2.20.0
+keras==3.13.2
+numpy==2.0.2
+pandas==2.2.2
+joblib==1.5.3
+
+# Physics & Reporting
+trimesh==4.12.1
 rtree
 fpdf
-pyserial
