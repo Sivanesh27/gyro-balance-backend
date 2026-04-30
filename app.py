@@ -1,23 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-GyroBalance Cloud Backend - app.py (RENDER STABLE VERSION)
-Fixes: Keras quantization_config error, 404 Route errors, and Professional PDF generation.
+GyroBalance Cloud Backend - app.py
+Optimization: Keras 3 Compatibility & Memory Management for Render
+Updated: Sensor Positions to 5.0, 22.5, 40.0
 """
 
 import os
-import json
 import uuid
 import joblib
 import numpy as np
 import threading
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
+from flask_socketio import SocketIO
 from flask_cors import CORS
 
 # AI & Physics Imports
+import keras
 import tensorflow as tf
-from tensorflow.keras import models
 import trimesh
+
+# PDF Report Import
 from fpdf import FPDF
 
 # ─────────────────────────────────────────────
@@ -25,130 +28,152 @@ from fpdf import FPDF
 # ─────────────────────────────────────────────
 app = Flask(__name__)
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CUSTOM_DIR = os.path.join(BASE_DIR, "custom_blades")
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
-# Ensure critical directories exist
+# Ensure directories exist
 for folder in [CUSTOM_DIR, MODELS_DIR, STATIC_DIR]:
     os.makedirs(folder, exist_ok=True)
 
+# Updated Sensor Positions based on new hardware setup
+SENSOR_POS = [5.0, 22.5, 40.0]
 BALANCE_TOLERANCE = 0.15
 
 # ─────────────────────────────────────────────
-# CORE AI LOADER (VERSION-PROOF)
+# CORE AI LOGIC (KERAS 3 COMPATIBLE)
 # ─────────────────────────────────────────────
 model_cache = {}
 
 def get_model_and_meta(blade_id):
-    """Safe loader for AI models. Uses compile=False to bypass Keras version mismatches."""
-    bid_str = str(blade_id)
-    if bid_str in model_cache:
-        return model_cache[bid_str]
+    """
+    Retrieves AI model and physics metadata.
+    Fixed: Uses keras.models.load_model to support Keras 3 features.
+    """
+    # Clean cache if it gets too large for Render RAM
+    if len(model_cache) > 5:
+        model_cache.clear()
+        keras.backend.clear_session()
+
+    if blade_id in model_cache:
+        return model_cache[blade_id]
 
     try:
-        if bid_str in ["0", "1"]:
-            # Load Master Model
+        if str(blade_id) == "0":
             model_path = os.path.join(MODELS_DIR, "gyro_master_model.keras")
             meta_path = os.path.join(MODELS_DIR, "blade_meta.pkl")
-            meta_data = joblib.load(meta_path)
-            meta = meta_data['B1'] if bid_str == "0" else meta_data['B2']
+            meta = joblib.load(meta_path)['B1']
+        elif str(blade_id) == "1":
+            model_path = os.path.join(MODELS_DIR, "gyro_master_model.keras")
+            meta_path = os.path.join(MODELS_DIR, "blade_meta.pkl")
+            meta = joblib.load(meta_path)['B2']
         else:
-            # Load Custom Isolated Blade
-            path = os.path.join(CUSTOM_DIR, bid_str)
+            path = os.path.join(CUSTOM_DIR, str(blade_id))
             model_path = os.path.join(path, "model.keras")
             meta_path = os.path.join(path, "meta.pkl")
-            meta = list(joblib.load(meta_path).values())[0]
+            meta_data = joblib.load(meta_path)
+            meta = meta_data[blade_id]
 
-        # THE CRITICAL FIX: compile=False ignores version-specific quantization metadata
-        model = tf.keras.models.load_model(model_path, compile=False)
-        model_cache[bid_str] = (model, meta)
+        # Use the standalone Keras loader for Keras 3 (.keras files)
+        model = keras.models.load_model(model_path)
+        model_cache[blade_id] = (model, meta)
         return model, meta
     except Exception as e:
-        print(f"❌ AI Loader Failure for {bid_str}: {e}")
+        print(f"❌ AI Loader Failure for {blade_id}: {str(e)}")
         return None, None
 
 # ─────────────────────────────────────────────
-# PROFESSIONAL PDF ENGINE
+# PDF REPORT GENERATOR
 # ─────────────────────────────────────────────
 class ProfessionalReport(FPDF):
     def header(self):
         logo_path = os.path.join(STATIC_DIR, "logo.png")
         if os.path.exists(logo_path):
-            self.image(logo_path, 10, 8, 30)
+            self.image(logo_path, 10, 10, 25)
         
+        self.set_xy(40, 12)
         self.set_font('Arial', 'B', 16)
         self.set_text_color(63, 81, 181) # Indigo
-        self.cell(80)
-        self.cell(30, 10, 'GYROBALANCE AI DIAGNOSTIC', 0, 1, 'C')
+        self.cell(0, 10, 'GYROBALANCE AI SYSTEM', 0, 1, 'L')
+        self.set_x(40)
+        self.set_font('Arial', 'B', 8)
+        self.set_text_color(100, 116, 139)
+        self.cell(0, 5, 'INDUSTRIAL GRADE BLADE KINEMATICS & LOAD ANALYTICS', 0, 1, 'L')
         self.ln(10)
-        self.set_draw_color(63, 81, 181)
-        self.line(10, 35, 200, 35)
 
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'GyroBalance Cloud Infrastructure | Page {self.page_no()}', 0, 0, 'C')
-
-    def section_header(self, text):
+    def chapter_title(self, label):
         self.set_font('Arial', 'B', 11)
-        self.set_fill_color(240, 240, 240)
-        self.cell(0, 10, f"  {text.upper()}", 0, 1, 'L', True)
-        self.ln(2)
+        self.set_text_color(63, 81, 181)
+        self.set_fill_color(243, 246, 248)
+        self.cell(0, 10, f"  {label.upper()}", 0, 1, 'L', True)
+        self.ln(3)
 
-    def data_row(self, label, value):
-        self.set_font('Arial', 'B', 10)
-        self.cell(60, 8, f"{label}:", 0, 0)
+    def add_data_row(self, label, value, unit=""):
+        self.set_font('Arial', 'B', 9)
+        self.set_text_color(100, 116, 139)
+        self.cell(50, 8, f"{label}:", 0, 0)
         self.set_font('Arial', '', 10)
-        self.cell(0, 8, str(value), 0, 1)
+        self.set_text_color(30, 41, 59)
+        self.cell(0, 8, f"{value} {unit}", 0, 1)
 
 # ─────────────────────────────────────────────
-# ROUTES
+# API ROUTES
 # ─────────────────────────────────────────────
 
-@app.route('/')
-def health():
-    return jsonify({"status": "healthy", "engine": "TensorFlow/Keras Stable"})
+@app.route('/list-blades', methods=['GET'])
+def list_blades():
+    blades = []
+    if os.path.exists(CUSTOM_DIR):
+        for bid in os.listdir(CUSTOM_DIR):
+            meta_path = os.path.join(CUSTOM_DIR, bid, "meta.pkl")
+            if os.path.exists(meta_path):
+                blades.append({"id": bid, "name": f"Custom Blade {bid}"})
+    return jsonify(blades)
 
 @app.route('/analyze', methods=['POST'])
-def analyze():
+def analyze_measurement():
     data = request.json
-    if not data or data.get('ping'): return jsonify({"status": "online"})
-
-    bid = str(data.get('blade_id', "0"))
     w_root = float(data.get('w_root', 0))
     w_mid = float(data.get('w_mid', 0))
     w_tip = float(data.get('w_tip', 0))
+    blade_id = data.get('blade_id', "0")
 
-    model, meta = get_model_and_meta(bid)
-    if not model: return jsonify({"error": "Model initialization failure"}), 500
+    model, meta = get_model_and_meta(blade_id)
+    if not model:
+        return jsonify({"error": "Neural model failed to initialize"}), 500
 
     target_cg, target_mass = meta
     total_g = max(1e-9, w_root + w_mid + w_tip)
     
-    # AI Inference: [type, w1, w2, w3]
-    inputs = np.array([[float(bid) if bid.isdigit() else 2.0, w_root/1000, w_mid/1000, w_tip/1000]])
-    preds = model.predict(inputs)
+    # Scale inputs for model (kg)
+    input_type = 2.0 if str(blade_id) not in ["0", "1"] else float(blade_id)
+    input_data = np.array([[input_type, w_root/1000.0, w_mid/1000.0, w_tip/1000.0]], dtype=np.float32)
     
+    # AI Inference
+    preds = model.predict(input_data, verbose=0)
     pred_cg = float(preds[0][0][0])
     defect_probs = preds[1][0]
     defect_idx = np.argmax(defect_probs)
 
     defect_map = {
-        0: ("HEALTHY DNA", "Structural load parity confirmed.", "DNA VERIFIED."),
-        1: ("RESIN POOL", "Density excess at tip coordinates.", "TIP MASS ANOMALY."),
-        2: ("AIR VOID", "Critical core density dropout.", "INTERNAL BREACH."),
-        3: ("INFILL ERROR", "Distribution drift detected.", "INFILL DRIFT.")
+        0: {"name": "HEALTHY", "desc": "Validated load parity.", "sig": "DNA CONFIRMED."},
+        1: {"name": "RESIN POOL", "desc": "Excess weight at tip.", "sig": "TIP ZONE ANOMALY."},
+        2: {"name": "VOID", "desc": "Air pocket in core.", "sig": "CORE INTEGRITY BREACH."},
+        3: {"name": "INFILL", "desc": "Density drift.", "sig": "INFILL SHIFT."}
     }
-    
-    status, diag_desc, sig = defect_map[defect_idx]
+
+    diag = defect_map[defect_idx]
     deviation = pred_cg - target_cg
     is_balanced = abs(deviation) < BALANCE_TOLERANCE
 
+    # Calculation for counter-ballast
     if not is_balanced:
-        action = "ADD WEIGHT"
+        action = "ADD BALLAST"
+        status = diag["name"]
+        # Simple mitigation logic: place opposite to deviation
         corr_loc = 0.0 if deviation > 0 else 45.0
         corr_mass = (total_g * abs(deviation)) / (abs(target_cg - corr_loc) + 1e-9)
     else:
@@ -158,57 +183,61 @@ def analyze():
         "w_root": w_root, "w_mid": w_mid, "w_tip": w_tip,
         "cg": round(pred_cg, 2), "target_cg": round(target_cg, 2),
         "deviation": round(deviation, 3), "status": status,
-        "status_desc": sig, "diagnosis_details": diag_desc,
+        "status_desc": diag["sig"], "diagnosis_details": diag["desc"],
         "target_mass": target_mass,
         "correction": {"action": action, "mass": round(corr_mass, 1), "location": round(corr_loc, 1)},
         "report": {
             "items": [
-                {"sensor": "Root Zone", "value": w_root/1000, "impact": f"{(w_root/total_g)*100:.1f}% Load"},
-                {"sensor": "Mid Span", "value": w_mid/1000, "impact": f"{(w_mid/total_g)*100:.1f}% Load"},
-                {"sensor": "Tip Zone", "value": w_tip/1000, "impact": f"{(w_tip/total_g)*100:.1f}% Load"}
+                {"sensor": "Root Zone", "value": w_root/1000.0, "impact": f"{(w_root/total_g)*100:.1f}% Impact"},
+                {"sensor": "Mid Span", "value": w_mid/1000.0, "impact": f"{(w_mid/total_g)*100:.1f}% Impact"},
+                {"sensor": "Tip Zone", "value": w_tip/1000.0, "impact": f"{(w_tip/total_g)*100:.1f}% Impact"}
             ],
-            "interpretation": f"AI Diagnostic Result: {status}."
+            "interpretation": f"AI Diagnostic Result: {diag['name']} detected."
         }
     })
 
-@app.route('/list-blades', methods=['GET'])
-def list_blades():
-    blades = []
-    if os.path.exists(CUSTOM_DIR):
-        for b_id in os.listdir(CUSTOM_DIR):
-            blades.append({"id": b_id, "name": f"Custom Blade {b_id}"})
-    return jsonify(blades)
-
-@app.route('/get-stl/<blade_id>', methods=['GET'])
-def get_stl(blade_id):
-    path = os.path.join(CUSTOM_DIR, blade_id, "blade.stl")
-    return send_file(path) if os.path.exists(path) else (jsonify({"error": "Not Found"}), 404)
-
 @app.route('/add-blade', methods=['POST'])
-def add_blade():
+def add_new_blade():
+    if 'stl' not in request.files:
+        return jsonify({"error": "Missing STL"}), 400
+    
     file = request.files['stl']
-    bid = str(uuid.uuid4())[:8]
-    folder = os.path.join(CUSTOM_DIR, bid)
+    density = float(request.form.get('density', 1.25))
+    
+    blade_id = str(uuid.uuid4())[:8]
+    folder = os.path.join(CUSTOM_DIR, blade_id)
     os.makedirs(folder, exist_ok=True)
     
     stl_path = os.path.join(folder, "blade.stl")
     file.save(stl_path)
     
-    mesh = trimesh.load(stl_path)
-    density = float(request.form.get('density', 1.25))
-    scale = 0.1
-    ideal_cg = float(mesh.centroid[0]) * scale
-    ideal_mass = (float(mesh.volume) * (scale**3) * density) / 1000
-    
-    joblib.dump({bid: [ideal_cg, ideal_mass]}, os.path.join(folder, "meta.pkl"))
-    
-    # Use Master Model as base template for the new blade
-    master_path = os.path.join(MODELS_DIR, "gyro_master_model.keras")
-    if os.path.exists(master_path):
-        m = models.load_model(master_path, compile=False)
-        m.save(os.path.join(folder, "model.keras"))
+    try:
+        # Physics DNA Extraction
+        mesh = trimesh.load(stl_path)
+        scale = 0.1 
+        ideal_cg = float(mesh.centroid[0]) * scale
+        volume_cm3 = float(mesh.volume) * (scale**3)
+        ideal_mass = (volume_cm3 * density) / 1000
+        
+        meta = {blade_id: [ideal_cg, ideal_mass]}
+        joblib.dump(meta, os.path.join(folder, "meta.pkl"))
 
-    return jsonify({"status": "registered", "blade_id": bid, "cg": ideal_cg})
+        # Model Cloning (For Custom Blades, we reuse the architecture)
+        def clone_model(bid, fld):
+            master = keras.models.load_model(os.path.join(MODELS_DIR, "gyro_master_model.keras"))
+            master.save(os.path.join(fld, "model.keras"))
+            keras.backend.clear_session()
+
+        threading.Thread(target=clone_model, args=(blade_id, folder)).start()
+
+        return jsonify({
+            "status": "Success",
+            "blade_id": blade_id,
+            "target_cg": ideal_cg,
+            "target_mass": ideal_mass
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/download-report', methods=['POST'])
 def download_report():
@@ -216,40 +245,48 @@ def download_report():
     pdf = ProfessionalReport()
     pdf.add_page()
     
-    pdf.section_header("1. Specifications & Metadata")
-    pdf.data_row("Timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    pdf.data_row("Target Center of Gravity", f"{data.get('target_cg', 0)} cm")
-    pdf.data_row("Target Mass Target", f"{data.get('target_mass', 0)*1000:.1f} g")
+    pdf.chapter_title("1. Profile Specification")
+    pdf.add_data_row("Timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    pdf.add_data_row("Design Target CG", f"{data['target_cg']}", "cm Axial")
+    pdf.add_data_row("Design Target Mass", f"{data['target_mass']*1000:.1f}", "grams")
     
-    pdf.ln(5)
-    pdf.section_header("2. Sensor Payload Analytics")
-    pdf.data_row("Load Cell 1 (Root)", f"{data.get('w_root', 0)} g")
-    pdf.data_row("Load Cell 2 (Mid)", f"{data.get('w_mid', 0)} g")
-    pdf.data_row("Load Cell 3 (Tip)", f"{data.get('w_tip', 0)} g")
-
-    pdf.ln(5)
-    pdf.section_header("3. AI Neural Diagnostic")
-    pdf.data_row("Calculated CG Coordinate", f"{data.get('cg', 0)} cm")
-    pdf.data_row("Measured Deviation", f"{data.get('deviation', 0)} cm")
-    pdf.data_row("Health Classification", data.get('status', 'PENDING'))
-    pdf.set_font('Arial', 'I', 10)
-    pdf.multi_cell(0, 8, f"INTERPRETATION: {data.get('status_desc', '')} {data.get('diagnosis_details', '')}")
+    pdf.chapter_title("2. Sensor Load Distribution")
+    pdf.add_data_row("Root Section (S1)", f"{data['w_root']}", "g")
+    pdf.add_data_row("Mid Span (S2)", f"{data['w_mid']}", "g")
+    pdf.add_data_row("Tip Zone (S3)", f"{data['w_tip']}", "g")
     
-    pdf.ln(5)
-    pdf.section_header("4. Mitigation Strategy")
-    correction = data.get('correction', {})
-    if correction.get('action') != "NONE":
-        pdf.set_text_color(200, 0, 0)
-        pdf.data_row("Action Directive", correction.get('action'))
-        pdf.data_row("Counterweight Mass", f"{correction.get('mass')} g")
-        pdf.data_row("Axial Placement", f"@{correction.get('location')} cm")
+    pdf.chapter_title("3. Neural AI Diagnostic")
+    pdf.add_data_row("Calculated CG", f"{data['cg']}", "cm")
+    pdf.add_data_row("Drift / Deviation", f"{data['deviation']}", "cm")
+    
+    status = data['status']
+    is_healthy = status == "BALANCED" or status == "HEALTHY"
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_text_color(22, 163, 74) if is_healthy else pdf.set_text_color(220, 38, 38)
+    pdf.cell(0, 10, f"CLASSIFICATION: {status}", 0, 1)
+    
+    pdf.set_text_color(30, 41, 59)
+    pdf.set_font('Arial', 'I', 9)
+    pdf.multi_cell(0, 6, f"AI Logic Trace: {data['status_desc']}")
+    
+    pdf.chapter_title("4. Engineering Mitigation Directive")
+    corr = data['correction']
+    if corr['action'] != "NONE":
+        pdf.set_text_color(180, 0, 0)
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(0, 8, f"REQUIRED ACTION: {corr['action']}", 0, 1)
+        pdf.set_text_color(30, 41, 59)
+        pdf.set_font('Arial', '', 10)
+        pdf.cell(0, 8, f"- Counter-Ballast Mass: {corr['mass']:.1f} grams", 0, 1)
+        pdf.cell(0, 8, f"- Placement Coordinate: {corr['location']:.1f} cm Axial from Root", 0, 1)
     else:
-        pdf.set_text_color(0, 150, 0)
-        pdf.cell(0, 10, "VALIDATED: No counterbalance ballast required.", 0, 1)
+        pdf.set_text_color(22, 163, 74)
+        pdf.cell(0, 10, "CERTIFICATION: STRUCTURAL DNA VALIDATED. NO MITIGATION REQUIRED.", 0, 1)
 
-    pdf_path = os.path.join(BASE_DIR, "report.pdf")
-    pdf.output(pdf_path)
-    return send_file(pdf_path, as_attachment=True)
+    temp_path = os.path.join(BASE_DIR, "report_output.pdf")
+    pdf.output(temp_path)
+    return send_file(temp_path, as_attachment=True)
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
