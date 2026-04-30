@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: gyrobalance-cloud-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    # Using gunicorn with eventlet worker for SocketIO support
+    startCommand: gunicorn -k eventlet -w 1 --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
+      - key: PORT
+        value: 5000
+    
+    # CRITICAL: Persistent storage for your custom AI models and STL files
+    # This prevents your new blades from being deleted on restart
+    disk:
+      name: custom-blades-data
+      mountPath: /custom_blades
+      sizeGB: 1

@@ -1,0 +1,4 @@
+custom_blades/
+temp_reports/*.pdf
+pycache/*.py[cod]*$py.class.venv/venv/ENV/env/.env
+.DS_Store Thumbs.db
