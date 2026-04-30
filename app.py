@@ -109,7 +109,7 @@ def perform_ai_analysis(w1_g, w2_g, w3_g, blade_id) -> dict:
     defect_map = {
         0: {
             "name": "HEALTHY DNA",
-            "desc": "Neural inference engine has validated internal structural load parity. Mass distribution matches design intent.",
+            "desc": "The neural inference engine has validated internal structural load parity. Mass distribution matches design intent.",
             "sig": "GEOMETRIC DNA CONFIRMED."
         },
         1: {
@@ -161,6 +161,41 @@ def perform_ai_analysis(w1_g, w2_g, w3_g, blade_id) -> dict:
     }
 
 # ─────────────────────────────────────────────
+# PDF REPORT GENERATOR (RESTORED & OPTIMIZED)
+# ─────────────────────────────────────────────
+class ProfessionalReport(FPDF):
+    def header(self):
+        # Logo handling (ensure static/logo.png exists in your repo)
+        logo_path = os.path.join(STATIC_DIR, "logo.png")
+        if os.path.exists(logo_path):
+            self.image(logo_path, 10, 10, 25)
+        
+        self.set_xy(40, 12)
+        self.set_font('Arial', 'B', 16)
+        self.set_text_color(63, 81, 181) # Indigo
+        self.cell(0, 10, 'GYROBALANCE AI SYSTEM', 0, 1, 'L')
+        self.set_x(40)
+        self.set_font('Arial', 'B', 8)
+        self.set_text_color(100, 116, 139)
+        self.cell(0, 5, 'INDUSTRIAL GRADE BLADE KINEMATICS & LOAD ANALYTICS', 0, 1, 'L')
+        self.ln(10)
+
+    def chapter_title(self, label):
+        self.set_font('Arial', 'B', 11)
+        self.set_text_color(63, 81, 181)
+        self.set_fill_color(243, 246, 248)
+        self.cell(0, 10, f"  {label.upper()}", 0, 1, 'L', True)
+        self.ln(3)
+
+    def add_data_row(self, label, value, unit=""):
+        self.set_font('Arial', 'B', 9)
+        self.set_text_color(100, 116, 139)
+        self.cell(50, 8, f"{label}:", 0, 0)
+        self.set_font('Arial', '', 10)
+        self.set_text_color(30, 41, 59)
+        self.cell(0, 8, f"{value} {unit}", 0, 1)
+
+# ─────────────────────────────────────────────
 # API ROUTES
 # ─────────────────────────────────────────────
 
@@ -173,7 +208,7 @@ def analyze_measurement():
     weights = data.get('buffer', [data]) 
     
     if len(weights) > 1:
-        # High-precision averaging logic from your preferred code
+        # High-precision averaging logic
         w_root = np.mean([w.get('w_root', 0) for w in weights])
         w_mid = np.mean([w.get('w_mid', 0) for w in weights])
         w_tip = np.mean([w.get('w_tip', 0) for w in weights])
@@ -197,11 +232,120 @@ def list_blades():
 
 @app.route('/download-report', methods=['POST'])
 def download_report():
-    # Placeholder for the Professional PDF generator
-    # Ensure FPDF is in your requirements.txt
-    return jsonify({"status": "Feature active with valid FPDF class"})
+    """
+    Generates a professional PDF diagnostic.
+    Uses /tmp for Render filesystem compatibility.
+    """
+    try:
+        data = request.json
+        pdf = ProfessionalReport()
+        pdf.add_page()
+        
+        # 1. Profile Specification
+        pdf.chapter_title("1. Profile Specification")
+        pdf.add_data_row("Timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        pdf.add_data_row("Design Target CG", f"{data.get('target_cg', 0):.2f}", "cm Axial")
+        pdf.add_data_row("Design Target Mass", f"{data.get('target_mass', 0)*1000:.1f}", "grams")
+        
+        # 2. Sensor Load Distribution
+        pdf.chapter_title("2. Sensor Load Distribution")
+        pdf.add_data_row("Root Section (S1)", f"{data.get('w_root', 0):.1f}", "g")
+        pdf.add_data_row("Mid Span (S2)", f"{data.get('w_mid', 0):.1f}", "g")
+        pdf.add_data_row("Tip Zone (S3)", f"{data.get('w_tip', 0):.1f}", "g")
+        
+        # 3. AI Neural Diagnostic
+        pdf.chapter_title("3. Neural AI Diagnostic")
+        pdf.add_data_row("Calculated CG", f"{data.get('cg', 0):.2f}", "cm")
+        pdf.add_data_row("Drift / Deviation", f"{data.get('deviation', 0):.3f}", "cm")
+        
+        status = data.get('status', 'Unknown')
+        pdf.set_font('Arial', 'B', 10)
+        # Visual color coding for status
+        if "BALANCED" in status or "HEALTHY" in status:
+            pdf.set_text_color(22, 163, 74) # Emerald Green
+        else:
+            pdf.set_text_color(220, 38, 38) # Crimson Red
+        
+        pdf.cell(0, 10, f"CLASSIFICATION: {status}", 0, 1)
+        
+        pdf.set_text_color(30, 41, 59)
+        pdf.set_font('Arial', 'I', 9)
+        pdf.multi_cell(0, 6, f"AI Logic Trace: {data.get('status_desc', 'No signature detected.')}")
+        
+        # 4. Engineering Mitigation
+        pdf.chapter_title("4. Engineering Mitigation Directive")
+        correction = data.get('correction', {})
+        if correction.get('action') != "NONE":
+            pdf.set_font('Arial', 'B', 10)
+            pdf.set_text_color(180, 0, 0)
+            pdf.cell(0, 8, f"REQUIRED ACTION: {correction.get('action')}", 0, 1)
+            pdf.set_text_color(30, 41, 59)
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 8, f"- Counter-Ballast Mass: {correction.get('mass', 0):.1f} grams", 0, 1)
+            pdf.cell(0, 8, f"- Placement Coordinate: {correction.get('location', 0):.1f} cm Axial from Root", 0, 1)
+        else:
+            pdf.set_text_color(22, 163, 74)
+            pdf.cell(0, 10, "CERTIFICATION: STRUCTURAL DNA VALIDATED. NO MITIGATION REQUIRED.", 0, 1)
+
+        # Render Compatibility: Use /tmp for transient files
+        report_filename = f"GyroBalance_Report_{uuid.uuid4().hex[:8]}.pdf"
+        temp_path = os.path.join("/tmp", report_filename)
+        pdf.output(temp_path)
+        
+        return send_file(
+            temp_path, 
+            as_attachment=True, 
+            download_name=f"GyroBalance_Report_{status}.pdf",
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        print(f"❌ PDF Generation Error: {str(e)}")
+        return jsonify({"error": "Failed to generate PDF. Check backend logs."}), 500
+
+@app.route('/add-blade', methods=['POST'])
+def add_new_blade():
+    if 'stl' not in request.files:
+        return jsonify({"error": "Missing STL"}), 400
+    
+    file = request.files['stl']
+    density = float(request.form.get('density', 1.25))
+    
+    blade_id = str(uuid.uuid4())[:8]
+    folder = os.path.join(CUSTOM_DIR, blade_id)
+    os.makedirs(folder, exist_ok=True)
+    
+    stl_path = os.path.join(folder, "blade.stl")
+    file.save(stl_path)
+    
+    try:
+        # Physics DNA Extraction
+        mesh = trimesh.load(stl_path)
+        scale = 0.1 
+        ideal_cg = float(mesh.centroid[0]) * scale
+        volume_cm3 = float(mesh.volume) * (scale**3)
+        ideal_mass = (volume_cm3 * density) / 1000
+        
+        meta = {blade_id: [ideal_cg, ideal_mass]}
+        joblib.dump(meta, os.path.join(folder, "meta.pkl"))
+
+        # Model Cloning (For Custom Blades, we reuse architecture)
+        def clone_model(bid, fld):
+            master = keras.models.load_model(os.path.join(MODELS_DIR, "gyro_master_model.keras"))
+            master.save(os.path.join(fld, "model.keras"))
+            keras.backend.clear_session()
+
+        threading.Thread(target=clone_model, args=(blade_id, folder)).start()
+
+        return jsonify({
+            "status": "Success",
+            "blade_id": blade_id,
+            "target_cg": ideal_cg,
+            "target_mass": ideal_mass
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # Render deployment uses the PORT environment variable
+    # Render deployment uses PORT environment variable
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
