@@ -294,8 +294,6 @@ def download_report():
         
         return send_file(
             temp_path, 
-            as_attachment=True, 
-            download_name=f"GyroBalance_Report_{status}.pdf",
             mimetype='application/pdf'
         )
     except Exception as e:
