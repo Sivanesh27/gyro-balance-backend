@@ -2,8 +2,8 @@
 flask
 flask-socketio
 flask-cors
-gunicorn
-eventlet
+gunicorn==20.1.0
+eventlet==0.33.3
 
 # AI Stack
 tensorflow-cpu==2.20.0
