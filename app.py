@@ -294,9 +294,7 @@ def download_report():
         
         return send_file(
             temp_path, 
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=report_filename
+            mimetype='application/pdf'
         )
     except Exception as e:
         print(f"❌ PDF Generation Error: {str(e)}")
