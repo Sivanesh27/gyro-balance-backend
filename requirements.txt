@@ -2,7 +2,7 @@
 flask
 flask-socketio
 flask-cors
-gunicorn==20.1.0
+gunicorn==21.2.0
 eventlet==0.33.3
 
 # AI Stack
