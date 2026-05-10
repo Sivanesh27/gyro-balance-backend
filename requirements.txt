@@ -5,7 +5,7 @@ flask-cors
 gunicorn
 eventlet
 
-# AI Stack - Matched to your Colab Audit
+# AI Stack
 tensorflow-cpu==2.20.0
 keras==3.13.2
 numpy==2.0.2
