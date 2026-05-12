@@ -64,12 +64,10 @@ def get_model_and_meta(blade_id):
     try:
         if str(blade_id) == "0":
             model_path = os.path.join(MODELS_DIR, "gyro_master_model.keras")
-            meta_path = os.path.join(MODELS_DIR, "blade_meta.pkl")
-            meta = joblib.load(meta_path)['B1']
+            meta = [11.83, 0.0]
         elif str(blade_id) == "1":
             model_path = os.path.join(MODELS_DIR, "gyro_master_model.keras")
-            meta_path = os.path.join(MODELS_DIR, "blade_meta.pkl")
-            meta = joblib.load(meta_path)['B2']
+            meta = [16.60, 0.0] 
         else:
             path = os.path.join(CUSTOM_DIR, str(blade_id))
             model_path = os.path.join(path, "model.keras")
