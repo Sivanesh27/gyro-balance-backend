@@ -285,15 +285,21 @@ def download_report():
             pdf.set_text_color(22, 163, 74)
             pdf.cell(0, 10, "CERTIFICATION: STRUCTURAL DNA VALIDATED. NO MITIGATION REQUIRED.", 0, 1)
 
-        # Render Compatibility: Use /tmp for transient files
         report_filename = f"GyroBalance_Report_{uuid.uuid4().hex[:8]}.pdf"
         temp_path = os.path.join("/tmp", report_filename)
         pdf.output(temp_path)
-        
-        return send_file(
-            temp_path, 
-            mimetype='application/pdf'
+
+        response = send_file(
+            temp_path,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=report_filename
         )
+        response.headers['Content-Disposition'] = f'attachment; filename="{report_filename}"'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
+
     except Exception as e:
         print(f"❌ PDF Generation Error: {str(e)}")
         return jsonify({"error": "Failed to generate PDF. Check backend logs."}), 500
